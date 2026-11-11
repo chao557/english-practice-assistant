@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>English Practice Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f5f5;
+      color: #333;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+    header {
+      background: #2c3e50;
+      color: white;
+      padding: 12px 16px;
+    }
+    header h1 { font-size: 18px; margin-bottom: 4px; }
+    header p { font-size: 12px; opacity: 0.9; }
+    main {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+    }
+    .message {
+      max-width: 75%;
+      padding: 10px 14px;
+      margin: 6px 0;
+      border-radius: 12px;
+      line-height: 1.5;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      word-wrap: break-word;
+    }
+    .user {
+      background: #dbeafe;
+      align-self: flex-end;
+      margin-left: auto;
+      border-bottom-right-radius: 4px;
+    }
+    .assistant {
+      background: white;
+      border: 1px solid #e5e7eb;
+      border-left: 4px solid #2c3e50;
+      align-self: flex-start;
+      border-bottom-left-radius: 4px;
+    }
+    .interim { opacity: 0.6; }
+    .shadowing-hint {
+      color: #6b7280;
+      font-size: 12px;
+      text-align: center;
+      margin: 4px 0;
+      font-style: italic;
+    }
+    footer {
+      padding: 10px 16px;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: space-between;
+      position: relative;
+      z-index: 101;
+    }
+    #status {
+      font-size: 13px;
+      font-weight: 500;
+      color: #6b7280;
+    }
+    #status.listening { color: #16a34a; }
+    #status.speaking { color: #2563eb; }
+    #status.error { color: #dc2626; }
+    #status.thinking { color: #d97706; }
+    button {
+      padding: 6px 12px;
+      border: 1px solid #2c3e50;
+      background: #2c3e50;
+      color: white;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button:hover { background: #34495e; }
+    dialog {
+      border: none;
+      border-radius: 8px;
+      padding: 20px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.2);
+      max-width: 420px;
+      width: 90%;
+    }
+    dialog h2 { font-size: 16px; margin-bottom: 12px; }
+    dialog label {
+      display: block;
+      margin: 10px 0;
+      font-size: 13px;
+    }
+    dialog input, dialog select {
+      width: 100%;
+      padding: 8px;
+      margin-top: 4px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+    }
+    dialog .row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      margin: 10px 0;
+    }
+    dialog .row label { margin: 0; flex: 1; }
+    dialog .actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 16px;
+    }
+    dialog .actions button[value="cancel"] {
+      background: white;
+      color: #333;
+    }
+    #permissionHint {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      color: white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 100;
+    }
+    #permissionHint > div {
+      background: #2c3e50;
+      padding: 28px;
+      border-radius: 8px;
+      text-align: center;
+      max-width: 360px;
+    }
+    #permissionHint p { margin-bottom: 16px; line-height: 1.5; }
+    .hint {
+      font-size: 11px;
+      color: #6b7280;
+      text-align: center;
+      padding: 8px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>English Practice Assistant</h1>
+    <p>Listener: 30-year-old product marketing manager at Yutong Bus, Zhengzhou, father of two.</p>
+  </header>
+  <main id="chat"></main>
+  <p class="hint">Speak in English. The assistant will reply as the listener. Repeating its last sentence will be ignored as shadowing practice.</p>
+  <footer>
+    <span id="status">Initializing...</span>
+    <button id="settingsBtn">Settings</button>
+  </footer>
+
+  <div id="permissionHint" style="display:none;">
+    <div>
+      <p>Please allow microphone access to start practicing English.</p>
+      <button id="allowMic">Allow Microphone</button>
+    </div>
+  </div>
+
+  <dialog id="settingsDialog">
+    <form method="dialog">
+      <h2>Settings</h2>
+      <label>
+        API Key
+        <input id="apiKey" type="password" placeholder="sk-..." />
+      </label>
+      <label>
+        Base URL
+        <input id="baseUrl" type="url" value="https://api.openai.com/v1" />
+      </label>
+      <label>
+        Model
+        <input id="model" value="gpt-4o-mini" />
+      </label>
+      <div class="row">
+        <label>
+          Shadowing Threshold
+          <input id="threshold" type="range" min="0.6" max="0.9" step="0.05" value="0.75" />
+        </label>
+        <label>
+          Min Words
+          <input id="minWords" type="number" value="4" min="1" />
+        </label>
+      </div>
+      <div class="actions">
+        <button type="submit" value="cancel">Cancel</button>
+        <button type="submit" value="save">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    // ===== Persona prompt =====
+    const SYSTEM_PROMPT = `You are a 30-year-old product marketing manager working at Yutong Bus in Zhengzhou, Henan, China. You have two young children and live with your family in Zhengzhou. You are friendly, down-to-earth, and speak English at a practical, conversational level—clear enough for daily business and casual chat, occasionally with minor Chinese-English phrasing habits but always understandable.
+
+You are chatting with someone who is practicing spoken English. Your job is to be a natural listener and responder:
+- Reply in English only.
+- Keep responses short and natural, like real spoken dialogue (1–3 sentences usually, occasionally longer if the topic needs it).
+- Respond to what the user actually says. Do not lecture, correct grammar, or act like a teacher unless the user explicitly asks.
+- Be warm and curious. If the user mentions something about your background (Zhengzhou, Yutong, kids, marketing), answer naturally from your persona.
+- Do not ask a question in every single reply; sometimes a simple acknowledgment or comment is enough.
+
+Never reveal that you are an AI. Stay in character.`;
+
+    // ===== State =====
+    let isListening = false;
+    let isAssistantSpeaking = false;
+    let currentInterimId = null;
+    let lastAssistantText = '';
+
+    // ===== DOM refs =====
+    const chat = document.getElementById('chat');
+    const statusEl = document.getElementById('status');
+    const settingsBtn = document.getElementById('settingsBtn');
+    const settingsDialog = document.getElementById('settingsDialog');
+    const permissionHint = document.getElementById('permissionHint');
+    const allowMicBtn = document.getElementById('allowMic');
+
+    // ===== Utility functions =====
+    function updateStatus(text) {
+      statusEl.textContent = text;
+      statusEl.className = '';
+      if (text.includes('Listening')) statusEl.classList.add('listening');
+      else if (text.includes('Speaking')) statusEl.classList.add('speaking');
+      else if (text.includes('Thinking')) statusEl.classList.add('thinking');
+      else if (text.includes('Error')) statusEl.classList.add('error');
+    }
+
+    function appendMessage(role, text, isInterim = false) {
+      const id = `msg-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+      const div = document.createElement('div');
+      div.id = id;
+      div.className = `message ${role}${isInterim ? ' interim' : ''}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return id;
+    }
+
+    function removeInterim() {
+      if (currentInterimId) {
+        const el = document.getElementById(currentInterimId);
+        if (el) el.remove();
+        currentInterimId = null;
+      }
+    }
+
+    function showShadowingHint() {
+      const div = document.createElement('div');
+      div.className = 'shadowing-hint';
+      div.textContent = 'Detected shadowing practice — no response.';
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      updateStatus('Shadowing detected');
+      setTimeout(() => updateStatus('Listening...'), 1500);
+    }
+
+    // ===== Shadowing detection =====
+    function normalizeText(text) {
+      return text.toLowerCase().replace(/[^\w\s]/g, '').trim();
+    }
+
+    function levenshteinDistance(a, b) {
+      const matrix = Array.from({ length: a.length + 1 }, (_, i) => [i]);
+      for (let j = 1; j <= b.length; j++) matrix[0][j] = j;
+
+      for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+          const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j - 1] + cost
+          );
+        }
+      }
+      return matrix[a.length][b.length];
+    }
+
+    function isShadowing(userText, assistantText, threshold = 0.75, minWords = 4) {
+      if (!assistantText || !userText) return false;
+      const wordsA = normalizeText(assistantText).split(/\s+/).filter(Boolean);
+      const wordsB = normalizeText(userText).split(/\s+/).filter(Boolean);
+
+      if (wordsB.length < minWords) return false;
+
+      const distance = levenshteinDistance(wordsA, wordsB);
+      const maxLen = Math.max(wordsA.length, wordsB.length);
+      const similarity = maxLen === 0 ? 0 : 1 - distance / maxLen;
+      return similarity >= threshold;
+    }
+
+    // ===== LLM integration =====
+    async function sendToLLM(userText) {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const baseUrl = document.getElementById('baseUrl').value.trim() || 'https://api.openai.com/v1';
+      const model = document.getElementById('model').value.trim() || 'gpt-4o-mini';
+
+      if (!apiKey) {
+        updateStatus('Please set API Key in Settings.');
+        return null;
+      }
+
+      updateStatus('Thinking...');
+
+      const response = await fetch(`${baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: 'system', content: SYSTEM_PROMPT },
+            { role: 'user', content: userText }
+          ],
+          temperature: 0.8,
+          max_tokens: 150
+        })
+      });
+
+      if (!response.ok) {
+        const err = await response.text();
+        throw new Error(`LLM error ${response.status}: ${err}`);
+      }
+
+      const data = await response.json();
+      return data.choices?.[0]?.message?.content?.trim() || '';
+    }
+
+    // ===== Text-to-speech =====
+    function speak(text) {
+      if (!window.speechSynthesis) {
+        updateStatus('TTS not supported.');
+        startListening();
+        return;
+      }
+
+      isAssistantSpeaking = true;
+      stopListening();
+      updateStatus('Speaking...');
+
+      const utter = new SpeechSynthesisUtterance(text);
+      utter.lang = 'en-US';
+      utter.rate = 1;
+      utter.pitch = 1;
+
+      utter.onend = () => {
+        isAssistantSpeaking = false;
+        updateStatus('Listening...');
+        startListening();
+      };
+
+      utter.onerror = (err) => {
+        console.error('TTS error', err);
+        isAssistantSpeaking = false;
+        updateStatus('Listening...');
+        startListening();
+      };
+
+      window.speechSynthesis.speak(utter);
+    }
+
+    // ===== Main flow =====
+    async function handleUserInput(text) {
+      if (!text) return;
+
+      const threshold = parseFloat(document.getElementById('threshold').value) || 0.75;
+      const minWords = parseInt(document.getElementById('minWords').value, 10) || 4;
+
+      if (lastAssistantText && isShadowing(text, lastAssistantText, threshold, minWords)) {
+        showShadowingHint();
+        return;
+      }
+
+      stopListening();
+      appendMessage('user', text);
+
+      try {
+        const reply = await sendToLLM(text);
+        if (!reply) {
+          startListening();
+          return;
+        }
+
+        lastAssistantText = reply;
+        appendMessage('assistant', reply);
+        speak(reply);
+      } catch (err) {
+        console.error(err);
+        updateStatus(`Error: ${err.message}`);
+        startListening();
+      }
+    }
+
+    // ===== Speech recognition =====
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    let recognition = null;
+
+    if (SpeechRecognition) {
+      recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = 'en-US';
+
+      recognition.onresult = (event) => {
+        const results = event.results;
+        const last = results[results.length - 1];
+        const transcript = last[0].transcript.trim();
+
+        if (last.isFinal) {
+          removeInterim();
+          handleUserInput(transcript);
+        } else {
+          showInterim(transcript);
+        }
+      };
+
+      recognition.onerror = (event) => {
+        console.error('Speech error', event.error);
+        isListening = false;
+        if (event.error !== 'aborted' && event.error !== 'no-speech') {
+          updateStatus(`Error: ${event.error}`);
+        }
+        setTimeout(() => {
+          if (!isAssistantSpeaking) startListening();
+        }, 800);
+      };
+
+      recognition.onend = () => {
+        isListening = false;
+        if (!isAssistantSpeaking) startListening();
+      };
+    } else {
+      updateStatus('Speech API not supported. Use Chrome/Edge.');
+    }
+
+    function startListening() {
+      if (!recognition || isListening || isAssistantSpeaking) return;
+      try {
+        recognition.start();
+        isListening = true;
+        updateStatus('Listening...');
+      } catch (e) {
+        console.error('Start failed', e);
+      }
+    }
+
+    function stopListening() {
+      if (!recognition || !isListening) return;
+      recognition.stop();
+      isListening = false;
+    }
+
+    function showInterim(text) {
+      removeInterim();
+      currentInterimId = appendMessage('user', text, true);
+    }
+
+    // ===== Settings =====
+    function saveSettings() {
+      const settings = {
+        apiKey: document.getElementById('apiKey').value,
+        baseUrl: document.getElementById('baseUrl').value,
+        model: document.getElementById('model').value,
+        threshold: document.getElementById('threshold').value,
+        minWords: document.getElementById('minWords').value
+      };
+      localStorage.setItem('englishPracticeSettings', JSON.stringify(settings));
+      updateStatus('Settings saved');
+      setTimeout(() => {
+        if (!isAssistantSpeaking) startListening();
+      }, 500);
+    }
+
+    function loadSettings() {
+      const raw = localStorage.getItem('englishPracticeSettings');
+      if (!raw) return;
+      try {
+        const s = JSON.parse(raw);
+        document.getElementById('apiKey').value = s.apiKey || '';
+        document.getElementById('baseUrl').value = s.baseUrl || 'https://api.openai.com/v1';
+        document.getElementById('model').value = s.model || 'gpt-4o-mini';
+        document.getElementById('threshold').value = s.threshold || '0.75';
+        document.getElementById('minWords').value = s.minWords || '4';
+      } catch (e) {
+        console.error('Failed to load settings', e);
+      }
+    }
+
+    settingsBtn.addEventListener('click', () => {
+      stopListening();
+      settingsDialog.showModal();
+    });
+
+    settingsDialog.addEventListener('close', () => {
+      if (settingsDialog.returnValue === 'save') {
+        saveSettings();
+      } else {
+        if (!isAssistantSpeaking) startListening();
+      }
+    });
+
+    // ===== Microphone permission =====
+    async function requestMicrophone() {
+      try {
+        await navigator.mediaDevices.getUserMedia({ audio: true });
+        permissionHint.style.display = 'none';
+        startListening();
+      } catch (err) {
+        updateStatus('Microphone permission denied.');
+      }
+    }
+
+    allowMicBtn.addEventListener('click', requestMicrophone);
+
+    // ===== Init =====
+    loadSettings();
+
+    if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+      navigator.permissions.query({ name: 'microphone' }).then((result) => {
+        if (result.state === 'granted') {
+          permissionHint.style.display = 'none';
+          startListening();
+        } else {
+          permissionHint.style.display = 'flex';
+          updateStatus('Waiting for microphone permission');
+        }
+      }).catch(() => {
+        permissionHint.style.display = 'flex';
+        updateStatus('Waiting for microphone permission');
+      });
+    } else {
+      updateStatus('Microphone not available');
+    }
+  </script>
+</body>
+</html>
