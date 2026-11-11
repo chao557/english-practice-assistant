@@ -69,6 +69,22 @@
       position: relative;
       z-index: 101;
     }
+    #textInput {
+      flex: 1;
+      padding: 8px 12px;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    #sendBtn {
+      padding: 8px 16px;
+      background: #2c3e50;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    #sendBtn:hover { background: #34495e; }
     #status {
       font-size: 13px;
       font-weight: 500;
@@ -158,9 +174,11 @@
     <p>Listener: 30-year-old product marketing manager at Yutong Bus, Zhengzhou, father of two.</p>
   </header>
   <main id="chat"></main>
-  <p class="hint">Speak in English. The assistant will reply as the listener. Repeating its last sentence will be ignored as shadowing practice.</p>
+  <p class="hint">Speak or type in English. The assistant will reply as the listener. Repeating its last sentence will be ignored as shadowing practice.</p>
   <footer>
     <span id="status">Initializing...</span>
+    <input id="textInput" type="text" placeholder="Type in English..." />
+    <button id="sendBtn">Send</button>
     <button id="settingsBtn">Settings</button>
   </footer>
 
@@ -528,6 +546,22 @@ Never reveal that you are an AI. Stay in character.`;
     }
 
     allowMicBtn.addEventListener('click', requestMicrophone);
+
+    // ===== Text input fallback =====
+    const textInput = document.getElementById('textInput');
+    const sendBtn = document.getElementById('sendBtn');
+
+    function submitTextInput() {
+      const text = textInput.value.trim();
+      if (!text) return;
+      textInput.value = '';
+      handleUserInput(text);
+    }
+
+    sendBtn.addEventListener('click', submitTextInput);
+    textInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') submitTextInput();
+    });
 
     // ===== Init =====
     loadSettings();
